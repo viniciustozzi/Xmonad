@@ -1,5 +1,7 @@
 #+TITLE: XMonad
 
+This is my current XMonad configuration file, feel free to use it and adjust to your needs. At the moment is a little messy but I plan to organize and add better comments to all sections.
+
 * Table of Contents :toc:
 :PROPERTIES:
 :header-args: :tangle ~/.xmonad/xmonad.hs
