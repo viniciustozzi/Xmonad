@@ -1,0 +1,444 @@
+#+TITLE: XMonad
+
+* Table of Contents :toc:
+:PROPERTIES:
+:header-args: :tangle ~/.xmonad/xmonad.hs
+:END:
+  - [[#imports][Imports]]
+  - [[#general-settings][General Settings]]
+  - [[#keybindings][Keybindings]]
+  - [[#scratchpad][Scratchpad]]
+  - [[#mouse][Mouse]]
+  - [[#layouts][Layouts]]
+  - [[#window-rules][Window Rules]]
+  - [[#event-handling][Event Handling]]
+  - [[#status-bar-and-logging][Status Bar and Logging]]
+  - [[#startup-hook][Startup Hook]]
+  - [[#run-xmonad][Run Xmonad]]
+
+** Imports
+#+begin_src haskell
+import XMonad
+import Data.Monoid
+import System.Exit
+import XMonad.Hooks.ManageDocks
+import XMonad.Util.SpawnOnce
+import XMonad.Util.EZConfig
+import XMonad.Util.Run
+
+import XMonad.Layout.LayoutModifier
+import XMonad.Layout.LimitWindows (limitWindows, increaseLimit, decreaseLimit)
+import XMonad.Layout.Magnifier
+import XMonad.Layout.MultiToggle (mkToggle, single, EOT(EOT), (??))
+import XMonad.Layout.MultiToggle.Instances (StdTransformers(NBFULL, MIRROR, NOBORDERS))
+import XMonad.Layout.NoBorders
+import XMonad.Layout.Renamed (renamed, Rename(Replace))
+import XMonad.Layout.Spacing
+import XMonad.Layout.WindowArranger (windowArrange, WindowArrangerMsg(..))
+import qualified XMonad.Layout.ToggleLayouts as T (toggleLayouts, ToggleLayout(Toggle))
+import qualified XMonad.Layout.MultiToggle as MT (Toggle(..))
+import XMonad.Layout.SimplestFloat
+import XMonad.Util.NamedScratchpad
+import XMonad.Layout.ResizableTile
+import XMonad.Actions.MouseResize
+import XMonad.Util.Scratchpad
+import XMonad.Actions.WithAll (sinkAll, killAll)
+import XMonad.Hooks.SetWMName
+import XMonad.Hooks.DynamicLog (dynamicLogWithPP, wrap, xmobarPP, xmobarColor, shorten, PP(..))
+
+import qualified XMonad.StackSet as W
+import qualified Data.Map        as M
+#+end_src
+** General Settings
+#+begin_src haskell
+-- The preferred terminal program, which is used in a binding below and by
+-- certain contrib modules.
+--
+myTerminal :: [Char]
+myTerminal = "alacritty"
+
+-- Whether focus follows the mouse pointer.
+myFocusFollowsMouse :: Bool
+myFocusFollowsMouse = False
+
+-- Whether clicking on a window to focus also passes the click to the window
+myClickJustFocuses :: Bool
+myClickJustFocuses = False
+
+-- Width of the window border in pixels.
+--
+myBorderWidth :: Dimension
+myBorderWidth = 2
+
+-- modMask lets you specify which modkey you want to use. The default
+-- is mod1Mask ("left alt").  You may also consider using mod3Mask
+-- ("right alt"), which does not conflict with emacs keybindings. The
+-- "windows key" is usually mod4Mask.
+--
+myModMask :: KeyMask
+myModMask = mod4Mask
+
+-- The default number of workspaces (virtual screens) and their names.
+-- By default we use numeric strings, but any string may be used as a
+-- workspace name. The number of workspaces is determined by the length
+-- of this list.
+--
+-- A tagging example:
+--
+-- > workspaces = ["web", "irc", "code" ] ++ map show [4..9]
+--
+myWorkspaces :: [[Char]]
+myWorkspaces = ["1","2","3","4","5","6","7","8","9"]
+
+-- Border colors for unfocused and focused windows, respectively.
+--
+myNormalBorderColor :: [Char]
+myNormalBorderColor  = "#000000"
+
+myFocusedBorderColor :: [Char]
+myFocusedBorderColor = "#808080"
+
+#+end_src
+** Keybindings
+#+begin_src haskell
+------------------------------------------------------------------------
+-- Key bindings. Add, modify or remove key bindings here.
+--
+myKeys :: [(String, X ())]
+myKeys =
+        [
+          ("M-S-r", spawn "xmonad --recompile; xmonad --restart;")        -- Restarts xmonad
+        , ("M-S-e", io exitSuccess)-- Quits xmonad
+        , ("M-<Space>", spawn "dmenu_run")
+        --, ("M-t", spawn myTerminal)
+        , ("M-q", kill)                         -- Kill the currently focused client
+        --, ("M-t", sendMessage (T.Toggle "floats"))       -- Toggles my 'floats' layout
+        --, ("M-m", windows W.focusMaster)     -- Move focus to the master window
+        , ("M-j", windows W.focusDown)       -- Move focus to the next window
+        , ("M-k", windows W.focusUp)         -- Move focus to the prev window
+        , ("M-<Return>", windows W.swapMaster)    -- Swap the focused window and the master window
+        --, ("M-<Tab>", sendMessage NextLayout)                -- Switch to next layout
+        , ("M-f", sendMessage (MT.Toggle NBFULL) >> sendMessage ToggleStruts) -- Toggles noborder/full
+        , ("M-<Delete>", withFocused $ windows . W.sink) -- Push floating window back to tile
+        , ("M-S-<Delete>", sinkAll)                      -- Push ALL floating windows to tile
+        , ("M-S-n", sendMessage $ MT.Toggle NOBORDERS)      -- Toggles noborder
+        , ("M-h", sendMessage Shrink)                       -- Shrink horiz window width
+        , ("M-l", sendMessage Expand)                       -- Expand horiz window width
+        , ("<XF86AudioLowerVolume>", spawn "amixer set Master 5%- unmute")
+        , ("<XF86AudioRaiseVolume>", spawn "amixer set Master 5%+ unmute")
+        , ("M-e", spawn "emacsclient -a -n -c")
+        , ("M-p", spawn "passmenu")       -- Move focus to the next window
+        --, ("M-t", spawn "emacsclient -c -a '' --eval '(eshell)'")
+        , ("M-t", spawn "emacsclient -c -a '' --eval '(+vterm/here nil)'")
+        , ("M-d", spawn "emacsclient -c -a '' --eval '(dired nil)'")
+        , ("M-n", spawn "emacsclient -c -a '' --eval '(elfeed)'")
+        --, ("M-S-t", namedScratchpadAction myScratchPads "terminal")
+        , ("M-S-p", namedScratchpadAction myScratchPads "pavucontrol")
+        , ("M-S-m", namedScratchpadAction myScratchPads "mocp")
+        , ("M-S-s", namedScratchpadAction myScratchPads "spotify")
+        , ("M-S-<Return>", namedScratchpadAction myScratchPads "eshell")
+        , ("M-b", spawn "emacsclient -c -a '' --eval '(ibuffer)'")
+        , ("M-S-l", spawn "xlock")
+        , ("M-S-<F9>", spawn "systemctl suspend")
+        , ("M-s f", spawn "xrandr --output DP-0 --mode 2048x1152 --output LVDS-0 --off")
+        , ("M-s l", spawn "xrandr --output DP-0 --mode 1280x800 --output LVDS-0 --off")
+        , ("M-s n", spawn "xrandr --output DP-0 --off --output LVDS-0 --mode 1600x900")
+        , ("M-o c", spawn "org-capture")
+
+        --, ("M-c", namedScratchpadAction myScratchPads "calendar")
+        ]
+
+        where
+         scratchPad = scratchpadSpawnActionTerminal myTerminal
+
+#+end_src
+** Scratchpad
+#+begin_src haskell
+myScratchPads :: [NamedScratchpad]
+myScratchPads = [ NS "terminal" spawnTerm findTerm manageTerm
+                , NS "mocp" spawnMocp findMocp manageMocp
+                , NS "pavucontrol" spawnPavu findPavu managePavu
+                , NS "spotify" spawnSpo findSpo manageSpo
+                , NS "emacs" spawnEmacs findEmacs manageEmacs
+                , NS "eshell" spawnEshell findEshell manageEshell
+                , NS "calendar" spawnCalendar findCalendar manageCalendar
+                ]
+    where
+
+    spawnEshell   = "emacsclient -a -n -c --eval '(eshell)' --frame-parameters='(quote (name . \"eshell-scratch\"))'"
+    findEshell    = title =? "eshell-scratch"
+    manageEshell  = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnCalendar   = "emacsclient -a -n -c --eval '(calendar)' --frame-parameters='(quote (name . \"calendar-scratch\"))'"
+    findCalendar    = title =? "calendar-scratch"
+    manageCalendar  = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.25
+                 w = 0.55
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnSpo   = "spotify"
+    findSpo    = resource =? "spotify"
+    manageSpo  = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnPavu  = "pavucontrol"
+    findPavu   = resource =? "pavucontrol"
+    managePavu = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnTerm  = myTerminal ++ " -t scratchpad"
+    findTerm   = title =? "scratchpad"
+    manageTerm = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnMocp  = myTerminal ++ " -t cmus -e cmus"
+    findMocp   = title =? "cmus"
+    manageMocp = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+    spawnEmacs  = "emacsclient -a -n -c --frame-parameters='(quote (name . \"escratchpad\"))'"
+    findEmacs   = title =? "escratchpad"
+    manageEmacs = customFloating $ W.RationalRect l t w h
+                 where
+                 h = 0.9
+                 w = 0.9
+                 t = 0.95 -h
+                 l = 0.95 -w
+
+#+end_src
+** Mouse
+#+begin_src haskell
+-- Mouse bindings: default actions bound to mouse events
+--
+myMouseBindings (XConfig {XMonad.modMask = modm}) = M.fromList $
+
+    -- mod-button1, Set the window to floating mode and move by dragging
+    [ ((modm, button1), (\w -> focus w >> mouseMoveWindow w
+                                       >> windows W.shiftMaster)),
+
+    -- mod-button2, Raise the window to the top of the stack
+    ((modm, button2), (\w -> focus w >> windows W.shiftMaster))
+
+    -- mod-button3, Set the window to floating mode and resize by dragging
+    , ((modm, button3), (\w -> focus w >> mouseResizeWindow w
+                                       >> windows W.shiftMaster))
+
+    -- you may also bind events to the mouse scroll wheel (button4 and button5)
+    ]
+
+#+end_src
+** Layouts
+#+begin_src haskell
+-- Layouts:
+
+-- You can specify and transform your layouts by modifying these values.
+-- If you change layout bindings be sure to use 'mod-shift-space' after
+-- restarting (with 'mod-q') to reset your layout state to the new
+-- defaults, as xmonad preserves your old layout settings by default.
+--
+-- The available layouts.  Note that each layout is separated by |||,
+-- which denotes layout choice.
+
+-- ||| Mirror tiled (to enable horizontal master/stack)
+
+-- Makes setting the spacingRaw simpler to write. The spacingRaw
+-- module adds a configurable amount of space around windows.
+mySpacing :: Integer -> l a -> XMonad.Layout.LayoutModifier.ModifiedLayout Spacing l a
+mySpacing i = spacingRaw False (Border i i i i) True (Border i i i i) True
+
+-- Below is a variation of the above except no borders are applied
+-- if fewer than two windows. So a single window has no gaps.
+mySpacing' :: Integer -> l a -> XMonad.Layout.LayoutModifier.ModifiedLayout Spacing l a
+mySpacing' i = spacingRaw True (Border i i i i) True (Border i i i i) True
+
+
+tall     = renamed [Replace "tall"]
+           $ limitWindows 12
+           $ mySpacing 5
+           $ ResizableTall 1 (3/100) (1/2) []
+
+magnify  = renamed [Replace "magnify"]
+           $ magnifier
+           $ limitWindows 12
+           $ mySpacing 8
+           $ ResizableTall 1 (3/100) (1/2) []
+
+
+monocle  = renamed [Replace "monocle"]
+           $ limitWindows 20
+           $ Full
+
+
+floats   = renamed [Replace "floats"]
+           $ limitWindows 20
+           $ simplestFloat
+
+myLayoutHook = avoidStruts $ mouseResize $ windowArrange $ T.toggleLayouts floats $
+               mkToggle (NBFULL ?? NOBORDERS ?? EOT) $ myDefaultLayout
+             where
+               -- I've commented out the layouts I don't use.
+               myDefaultLayout =     tall
+                              --   ||| magnify
+                                 ||| noBorders monocle
+                          --       ||| floats
+
+myLayout = avoidStruts (tiled  ||| Full)
+  where
+     -- default tiling algorithm partitions the screen into two panes
+     tiled   = Tall nmaster delta ratio
+
+     -- The default number of windows in the master pane
+     nmaster = 1
+
+     -- Default proportion of screen occupied by master pane
+     ratio   = 1/2
+
+     -- Percent of screen to increment by when resizing panes
+     delta   = 3/100
+
+#+end_src
+** Window Rules
+Specific configuration for specific programs
+
+#+begin_src haskell
+-- Window rules:
+
+-- Execute arbitrary actions and WindowSet manipulations when managing
+-- a new window. You can use this to, for example, always float a
+-- particular program, or have a client always appear on a particular
+-- workspace.
+--
+-- To find the property name associated with a program, use
+-- > xprop | grep WM_CLASS
+-- and click on the client you're interested in.
+--
+-- To match on the WM_NAME, you can use 'title' in the same way that
+-- 'className' and 'resource' are used below.
+--
+myManageHook = (composeAll
+    [ className =? "MPlayer"        --> doFloat
+    , className =? "Gimp"           --> doFloat
+    , resource  =? "desktop_window" --> doIgnore]) <+> namedScratchpadManageHook myScratchPads
+               --manageScratchPad
+
+#+end_src
+** Event Handling
+#+begin_src haskell
+-- Event handling
+
+-- * EwmhDesktops users should change this to ewmhDesktopsEventHook
+--
+-- Defines a custom handler function for X Events. The function should
+-- return (All True) if the default handler is to be run afterwards. To
+-- combine event hooks use mappend or mconcat from Data.Monoid.
+--
+myEventHook = mempty
+#+end_src
+** Status Bar and Logging
+This is not currently being used.
+
+#+begin_src haskell
+-- Status bars and logging
+
+-- Perform an arbitrary action on each internal state change or X event.
+-- See the 'XMonad.Hooks.DynamicLog' extension for examples.
+--
+myLogHook :: X ()
+myLogHook = return ()
+
+#+end_src
+** Startup Hook
+Code that runs at startup of Xmonad.
+
+#+begin_src haskell
+-- Startup hook
+
+-- Perform an arbitrary action each time xmonad starts or is restarted
+-- with mod-q.  Used by, e.g., XMonad.Layout.PerWorkspace to initialize
+-- per-workspace layout choices.
+--
+-- By default, do nothing.
+myStartupHook :: X ()
+myStartupHook = do
+  --spawnOnce "xrandr --output LVDS-0 --auto"
+  --spawnOnce "xrandr --output VGA-0 --mode 1920x1080 --output LVDS-0 --off"
+  spawnOnce "xrandr --output DP-0 --mode 2048x1152 --output LVDS-0 --off"
+  spawnOnce "nitrogen --restore &"
+  spawnOnce "protonmail-bridge &"
+  spawnOnce "setxkbmap -layout us_intl"
+  spawnOnce "picom --vsync -b"
+  spawnOnce "xwallpaper --maximize ~/.config/wall.png"
+  setWMName "LG3D"
+
+  --spawnOnce "picom --vsync -b"
+#+end_src
+** Run Xmonad
+
+#+begin_src haskell
+-- Now run xmonad with all the defaults we set up.
+
+-- Run xmonad with the settings you specify. No need to modify this.
+--
+main :: IO ()
+main = do
+  xmproc <- spawnPipe "xmobar ~/.xmonad/xmobar.config"
+  xmonad $ docks $ defaults xmproc
+
+-- A structure containing your configuration settings, overriding
+-- fields in the default config. Any you don't override, will
+-- use the defaults defined in xmonad/XMonad/Config.hs
+--
+-- No need to modify this.
+--
+defaults xmproc = def {
+      -- simple stuff
+        terminal           = myTerminal,
+        focusFollowsMouse  = myFocusFollowsMouse,
+        clickJustFocuses   = myClickJustFocuses,
+        borderWidth        = myBorderWidth,
+        modMask            = myModMask,
+        workspaces         = myWorkspaces,
+        normalBorderColor  = myNormalBorderColor,
+        focusedBorderColor = myFocusedBorderColor,
+
+      -- key bindings
+
+        mouseBindings      = myMouseBindings,
+
+      -- hooks, layouts
+        layoutHook         = myLayoutHook,
+        manageHook         = myManageHook,
+        handleEventHook    = myEventHook,
+        logHook            = dynamicLogWithPP xmobarPP
+                                   {
+                                    ppCurrent = xmobarColor "#8be9fd" "" . wrap "[" "]"
+                                  , ppTitle = xmobarColor "#8be9fd" "" . shorten 60
+                                  , ppOutput = hPutStrLn xmproc
+                                   } ,
+        startupHook        = myStartupHook
+    } `additionalKeysP` myKeys
+
+#+end_src
